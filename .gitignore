@@ -1,0 +1,4 @@
+# Herdr writes these into every mod folder on start
+*.d.ts
+jsconfig.json
+.DS_Store

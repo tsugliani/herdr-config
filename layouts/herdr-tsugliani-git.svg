@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200">
+  <rect width="320" height="200" fill="#0b0f16"/>
+  <!-- sidebar: spaces and agents -->
+  <rect x="0" y="0" width="70" height="200" fill="#11161f"/>
+  <rect x="8" y="12" width="40" height="5" rx="2" fill="#c9d1d9"/>
+  <g fill="#3b4452">
+    <rect x="8" y="28" width="52" height="6" rx="2"/><rect x="8" y="40" width="46" height="6" rx="2"/><rect x="8" y="52" width="50" height="6" rx="2"/>
+    <rect x="8" y="120" width="54" height="6" rx="2"/><rect x="8" y="132" width="44" height="6" rx="2"/>
+  </g>
+  <rect x="8" y="28" width="52" height="6" rx="2" fill="#5b8def"/>
+  <!-- tiger and octopus row above the sidebar footer -->
+  <rect x="0" y="150" width="70" height="1" fill="#2a3240"/>
+  <g transform="translate(-14,0)">
+    <rect x="17" y="155" width="2" height="6" fill="#f0963c"/><rect x="19" y="160" width="3" height="2" fill="#f0963c"/>
+    <rect x="22" y="158" width="22" height="9" rx="2" fill="#f0963c"/>
+    <rect x="42" y="155" width="9" height="10" rx="2" fill="#f0963c"/>
+    <rect x="27" y="159" width="1" height="6" fill="#1c1a1f"/><rect x="32" y="159" width="1" height="6" fill="#1c1a1f"/><rect x="37" y="159" width="1" height="6" fill="#1c1a1f"/>
+    <rect x="47" y="160" width="4" height="4" fill="#f6ecd8"/><rect x="46" y="158" width="1" height="1" fill="#1c1a1f"/>
+    <rect x="24" y="167" width="2" height="4" fill="#f0963c"/><rect x="29" y="167" width="2" height="4" fill="#f0963c"/><rect x="37" y="167" width="2" height="4" fill="#f0963c"/><rect x="41" y="167" width="2" height="4" fill="#f0963c"/>
+  </g>
+  <g>
+    <rect x="45" y="154" width="16" height="10" rx="4" fill="#a374db"/>
+    <rect x="48" y="157" width="3" height="3" fill="#f6f2fb"/><rect x="55" y="157" width="3" height="3" fill="#f6f2fb"/>
+    <rect x="50" y="158" width="1" height="2" fill="#1c1a1f"/><rect x="55" y="158" width="1" height="2" fill="#1c1a1f"/>
+    <rect x="46" y="164" width="14" height="1" fill="#6f45a8"/>
+    <rect x="45" y="165" width="2" height="6" fill="#a374db"/><rect x="49" y="165" width="2" height="6" fill="#a374db"/><rect x="52" y="165" width="2" height="6" fill="#a374db"/><rect x="55" y="165" width="2" height="6" fill="#a374db"/><rect x="59" y="165" width="2" height="6" fill="#a374db"/>
+    <rect x="64" y="157" width="1" height="1" fill="#89c4f4"/>
+  </g>
+  <rect x="0" y="178" width="70" height="1" fill="#2a3240"/>
+  <g fill="#3b4452"><rect x="8" y="184" width="30" height="4" rx="1"/><rect x="8" y="192" width="36" height="4" rx="1"/></g>
+  <!-- tab bar -->
+  <rect x="70" y="0" width="250" height="16" fill="#11161f"/>
+  <rect x="76" y="4" width="26" height="8" rx="3" fill="#2a3240"/><rect x="106" y="4" width="34" height="8" rx="3" fill="#3b4452"/>
+  <rect x="284" y="4" width="30" height="8" rx="3" fill="#2a3240"/>
+  <!-- diff tab: files one after another, inline -->
+  <rect x="76" y="22" width="156" height="172" rx="4" fill="#0f141c" stroke="#2a3240"/>
+  <rect x="77" y="23" width="154" height="9" fill="#1a212c"/><rect x="82" y="26" width="50" height="3" rx="1" fill="#c9d1d9"/>
+  <g>
+    <rect x="77" y="36" width="154" height="6" fill="#2ea04326"/><rect x="100" y="38" width="80" height="2" fill="#56d364"/>
+    <rect x="77" y="44" width="154" height="6" fill="#2ea04326"/><rect x="100" y="46" width="60" height="2" fill="#56d364"/>
+    <rect x="100" y="54" width="90" height="2" fill="#6e7681"/>
+    <rect x="77" y="60" width="154" height="6" fill="#f8514926"/><rect x="100" y="62" width="70" height="2" fill="#f85149"/>
+    <rect x="100" y="70" width="84" height="2" fill="#6e7681"/>
+  </g>
+  <rect x="77" y="80" width="154" height="9" fill="#1a212c"/><rect x="82" y="83" width="64" height="3" rx="1" fill="#c9d1d9"/>
+  <g>
+    <rect x="77" y="93" width="154" height="6" fill="#2ea04326"/><rect x="100" y="95" width="96" height="2" fill="#56d364"/>
+    <rect x="77" y="101" width="154" height="6" fill="#2ea04326"/><rect x="100" y="103" width="50" height="2" fill="#56d364"/>
+    <rect x="77" y="109" width="154" height="6" fill="#2ea04326"/><rect x="100" y="111" width="74" height="2" fill="#56d364"/>
+    <rect x="100" y="119" width="60" height="2" fill="#6e7681"/>
+  </g>
+  <rect x="77" y="128" width="154" height="9" fill="#1a212c"/><rect x="82" y="131" width="40" height="3" rx="1" fill="#c9d1d9"/>
+  <g>
+    <rect x="77" y="141" width="154" height="6" fill="#f8514926"/><rect x="100" y="143" width="66" height="2" fill="#f85149"/>
+    <rect x="77" y="149" width="154" height="6" fill="#2ea04326"/><rect x="100" y="151" width="88" height="2" fill="#56d364"/>
+  </g>
+  <!-- Changes panel: modes, folder tree, file diff -->
+  <rect x="238" y="22" width="76" height="172" rx="4" fill="#0f141c" stroke="#2a3240"/>
+  <rect x="243" y="28" width="30" height="4" rx="1" fill="#c9d1d9"/>
+  <rect x="243" y="37" width="20" height="6" rx="2" fill="#2a3240"/><rect x="266" y="37" width="20" height="6" rx="2" fill="#3b4452"/><rect x="289" y="37" width="20" height="6" rx="2" fill="#2a3240"/>
+  <g fill="#8b949e">
+    <rect x="243" y="50" width="26" height="3" rx="1"/>
+    <rect x="249" y="58" width="30" height="3" rx="1"/><rect x="249" y="66" width="24" height="3" rx="1"/>
+    <rect x="255" y="74" width="34" height="3" rx="1"/><rect x="255" y="82" width="28" height="3" rx="1"/>
+    <rect x="243" y="90" width="30" height="3" rx="1"/>
+  </g>
+  <rect x="239" y="72" width="74" height="7" fill="#5b8def33"/>
+  <rect x="239" y="100" width="74" height="1" fill="#2a3240"/>
+  <rect x="239" y="106" width="74" height="5" fill="#2ea04326"/><rect x="246" y="107" width="40" height="2" fill="#56d364"/>
+  <rect x="246" y="116" width="50" height="2" fill="#6e7681"/>
+  <rect x="239" y="122" width="74" height="5" fill="#f8514926"/><rect x="246" y="123" width="34" height="2" fill="#f85149"/>
+  <!-- status bar -->
+  <rect x="70" y="194" width="250" height="6" fill="#11161f"/><rect x="280" y="196" width="14" height="2" fill="#56d364"/><rect x="300" y="196" width="14" height="2" fill="#56d364"/>
+</svg>
