@@ -2,13 +2,17 @@
 # Installs this repo's layouts and mods into the Herdr app's home, and brings
 # changes made there back.
 #
-#   ./herdr.sh install [--force]   copy layouts/, themes/ and mods/ into Herdr, check the mods, switch layout and theme,
-#                                  and point Claude Code's statusLine at the session bar's script (needs jq)
+#   ./herdr.sh install [--force]   copy layouts/, themes/ and mods/ into Herdr, merge keys.json into its keys,
+#                                  check the mods, switch layout and theme, and point Claude Code's
+#                                  statusLine at the session bar's script (keys and statusLine need jq)
 #   ./herdr.sh pull                copy edits made in Herdr back into this repo
 #   ./herdr.sh status              what differs between this repo and Herdr
-#   ./herdr.sh uninstall           remove them from Herdr (back to the main layout and the previous statusLine)
+#   ./herdr.sh uninstall           remove them from Herdr (back to the main layout, the previous statusLine and keys)
 #
 # Copies, not symlinks: Herdr doesn't hot-reload a mod folder that is a symlink.
+# keys.json is the whole keymap (Herdr's defaults plus this repo's changes), to read and edit
+# in one place: install merges it into Herdr's own keys.json (keys only the person has stay),
+# keeping Herdr's file as it was the first time; uninstall puts that file back.
 # HERDR_APP_HOME picks another Herdr home (default ~/.config/herdr-app).
 set -euo pipefail
 
@@ -39,6 +43,61 @@ conflicts() {
     [ -e "$HOME_DIR/$f" ] || continue
     cmp -s "$REPO/$f" "$HOME_DIR/$f" || echo "$f"
   done
+  [ -n "$(keys_query clashes)" ] && echo "keys.json"
+  return 0
+}
+
+# ── Keys: this repo's keys.json, merged into Herdr's ─────────────────────────────────────
+KEYS="$REPO/keys.json"
+KEYS_HOME="$HOME_DIR/keys.json"
+KEYS_PREV="$HOME_DIR/backups/keys.prev.json"
+# Each of this repo's keys as [section, key, action]; $h is Herdr's keys.json.
+KEYS_EACH='$r[0] | to_entries[] | .key as $s | .value | to_entries[] | [$s, .key, .value]'
+keys_ready() { [ -f "$KEYS" ] && [ -f "$KEYS_HOME" ] && command -v jq >/dev/null; }
+
+# One line per key: clashes (Herdr binds it to something else) or missing (not bound there).
+keys_query() {
+  keys_ready || return 0
+  local test
+  case "$1" in
+    clashes) test='$h[0][$e[0]][$e[1]] != null and $h[0][$e[0]][$e[1]] != $e[2]' ;;
+    missing) test='$h[0][$e[0]][$e[1]] == null' ;;
+  esac
+  jq -rn --slurpfile r "$KEYS" --slurpfile h "$KEYS_HOME" \
+    "$KEYS_EACH | . as \$e | select($test) | \"\(\$e[0]): \(\$e[1])\""
+}
+
+# Rewrites Herdr's keys.json through a jq filter ($r is this repo's keys), only when it changes.
+keys_write() {
+  local next; next="$(jq --slurpfile r "$KEYS" "$1" "$KEYS_HOME")"
+  [ "$(jq -S . <<<"$next")" = "$(jq -S . "$KEYS_HOME")" ] && return 1
+  printf '%s\n' "$next" > "$KEYS_HOME.tmp" && mv -f "$KEYS_HOME.tmp" "$KEYS_HOME"
+}
+
+install_keys() {
+  [ -f "$KEYS" ] || return 0
+  command -v jq >/dev/null || { echo "jq is missing (brew install jq): keys.json not merged"; return; }
+  [ -f "$KEYS_HOME" ] || { echo "No $KEYS_HOME yet (start Herdr once): keys.json not merged"; return; }
+  [ -f "$KEYS_PREV" ] || { mkdir -p "$HOME_DIR/backups"; cp "$KEYS_HOME" "$KEYS_PREV"; }
+  if keys_write "reduce ($KEYS_EACH) as \$e (.; .[\$e[0]][\$e[1]] = \$e[2])"; then
+    echo "merged keys.json into Herdr's keys"
+  else
+    echo "Herdr's keys already have keys.json"
+  fi
+}
+
+# keys.json becomes Herdr's whole keymap as it is now.
+pull_keys() {
+  keys_ready || return 0
+  cp "$KEYS_HOME" "$KEYS"
+}
+
+# Herdr's keys.json goes back to how install first found it. Never strips keys one by one:
+# keys.json holds Herdr's defaults too, so that would take out nearly every key.
+uninstall_keys() {
+  [ -f "$KEYS_PREV" ] || return 0
+  mv -f "$KEYS_PREV" "$KEYS_HOME"
+  echo "restored Herdr's previous keys"
 }
 
 statusline_now() { [ -f "$CLAUDE_SETTINGS" ] && jq -r '.statusLine.command // ""' "$CLAUDE_SETTINGS" 2>/dev/null || true; }
@@ -92,6 +151,7 @@ install() {
     echo "installed mods/$m"
   done
   for f in $(files); do cp "$REPO/$f" "$HOME_DIR/$f"; echo "installed $f"; done
+  install_keys
   install_statusline
   if running; then
     for m in $(mods); do herdr-app check "$HOME_DIR/mods/$m"; done
@@ -108,6 +168,7 @@ pull() {
     rsync -a --delete "${EXCLUDES[@]}" "$HOME_DIR/mods/$m/" "$REPO/mods/$m/"
   done
   for f in $(files); do [ -f "$HOME_DIR/$f" ] && cp "$HOME_DIR/$f" "$REPO/$f"; done
+  pull_keys
   echo "pulled into $REPO"
 }
 
@@ -115,6 +176,7 @@ status() {
   local clash; clash="$(conflicts)"
   for m in $(mods); do [ -e "$HOME_DIR/mods/$m" ] || echo "not installed: mods/$m"; done
   for f in $(files); do [ -e "$HOME_DIR/$f" ] || echo "not installed: $f"; done
+  keys_query missing | sed 's/^/not installed: keys.json /'
   if [ -n "$clash" ]; then echo "differs:"; echo "$clash" | sed 's/^/  /'; else echo "installed copies match this repo"; fi
   local sl; sl="$(statusline_now)"
   if [ "$sl" = "$STATUSLINE" ]; then echo "Claude Code's statusLine runs claude-statusline.sh"
@@ -127,6 +189,7 @@ uninstall() {
     herdr-app do layout.switch --name main >/dev/null
   fi
   uninstall_statusline
+  uninstall_keys
   for m in $(mods); do rm -rf "$HOME_DIR/mods/$m"; echo "removed mods/$m"; done
   for f in $(files); do rm -f "$HOME_DIR/$f"; echo "removed $f"; done
 }
