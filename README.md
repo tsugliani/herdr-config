@@ -7,8 +7,8 @@ that also compares branches and browses history, and a full-tab diff viewer.
 
 ## What's in it
 
-One layout, ten mods and a theme. The layout places the mods; each mod is one
-piece of the window and works on its own.
+One layout, ten mods, a theme and a keymap. The layout places the mods; each mod
+is one piece of the window and works on its own.
 
 ### Layout: `herdr-tsugliani-git`
 
@@ -160,17 +160,31 @@ palette for terminals, and Herdr's panel colors mapped onto it (mantle bars,
 crust canvas, mauve accent). The layout doesn't set it; `./herdr.sh install`
 switches to it, and Settings > Look picks another.
 
+### Keys: `keys.json`
+
+The whole keymap in one file, to read and change: Herdr's default keys, plus
+`alt-shift-\` (split right) and `alt--` (split down). `global` keys work
+everywhere; `terminal` keys only while a terminal has focus. Each maps a key
+to a Herdr command (`herdr-app commands` lists them), or `send:<text>` to type
+into the terminal.
+
+`./herdr.sh install` merges it into Herdr's own `keys.json`: its keys win, and
+keys you have only in Herdr stay. The first install keeps Herdr's file as
+`~/.config/herdr-app/backups/keys.prev.json`, and `./herdr.sh uninstall` puts
+it back.
+
 ## Install
 
 Needs Herdr running at least once (it creates `~/.config/herdr-app`).
 
 ```sh
 git clone <this repo> && cd herdr-config
-./herdr.sh install        # copies layouts/, themes/ and mods/ into Herdr and switches to herdr-tsugliani-git and Catppuccin Mocha
+./herdr.sh install        # copies layouts/, themes/ and mods/ into Herdr, merges keys.json into its keys, and switches to herdr-tsugliani-git and Catppuccin Mocha
 ```
 
 `ctrl-shift-l` (`cmd-shift-l` on macOS) cycles back to your previous layout.
-`./herdr.sh uninstall` removes everything this repo installed.
+`./herdr.sh uninstall` removes everything this repo installed and restores
+Herdr's previous keys. Merging the keys needs `jq`.
 
 Installing never overwrites a different file of the same name: it stops and
 lists them. `./herdr.sh install --force` replaces them and keeps a copy in
@@ -195,6 +209,10 @@ doesn't reload a symlinked mod folder), so:
 - edit the installed copy (or ask an agent to: Herdr's `AGENTS.md` points it
   there), then `./herdr.sh pull` to bring the change here and commit it, or
 - edit here, then `./herdr.sh install --force`.
+
+The same goes for keys: change one in Herdr's `keys.json` and
+`./herdr.sh pull` copies the whole keymap back here, or edit `keys.json` here
+and `./herdr.sh install --force`.
 
 `./herdr.sh status` shows what differs between this repo and Herdr.
 `node --test` tests the diff parser (`mods/herdr-tsugliani-diff/diff.js`), the
