@@ -48,11 +48,21 @@ async function readDocs(ms) {
 // Changes `m`'s folders: shown at once, then written over what the core has now, again if
 // another device wrote first. Ends showing whatever the core holds.
 // Machines with a change still being written: the regular read leaves them alone, so a
-// read from just before the write can't briefly put the old folders back.
-const writing = new Map();
+// read from just before the write can't briefly put the old folders back. A write whose task
+// was cancelled never counts down, so a mark older than STUCK_MS stops counting: the regular
+// read takes the machine back instead of leaving its folders stale until the mod reloads.
+// Run edits from a popup before closing it: closing cancels its unfinished tasks.
+const writing = new Map(); // machine -> { n, at }
+const STUCK_MS = 60000;
+const busy = (m) => { const w = writing.get(mkey(m)); return !!w && w.n > 0 && Date.now() - w.at < STUCK_MS; };
+function mark(m, d) {
+  const w = writing.get(mkey(m));
+  const n = Math.max(0, (w && Date.now() - w.at < STUCK_MS ? w.n : 0) + d);
+  writing.set(mkey(m), { n, at: Date.now() });
+}
 
 async function edit(m, change) {
-  writing.set(mkey(m), (writing.get(mkey(m)) ?? 0) + 1);
+  mark(m, 1);
   const c = cache()[mkey(m)];
   setShared(CACHE, { ...cache(), [mkey(m)]: { version: c?.version ?? 0, value: toDoc(change(fromDoc(c?.value, m)), m) } });
   try {
@@ -67,7 +77,7 @@ async function edit(m, change) {
     const [got] = await readDocs([m]);
     if (got?.result) setCache(m, got.result.version, got.result.value);
   } catch {} finally {
-    writing.set(mkey(m), writing.get(mkey(m)) - 1);
+    mark(m, -1);
   }
 }
 
@@ -593,7 +603,7 @@ export default class Spaces extends View {
         const got = await readDocs(ms);
         ms.forEach((m, i) => {
           const r = got[i]?.result;
-          if (!r || writing.get(mkey(m))) return;
+          if (!r || busy(m)) return;
           if (r.version === 0) this.migrate(m);
           else setCache(m, r.version, r.value);
         });
@@ -646,10 +656,12 @@ export default class Spaces extends View {
     this.handle = cx.focus_handle();
   }
 
+  // Written before the dialog closes: closing cancels its unfinished tasks.
   submitRename() {
-    closeOverlay(props().overlay);
-    const { id, machine } = this.popup;
-    edit(machine ?? null, (list) => renameFolder(list, id, this.text));
+    if (this.saving) return;
+    this.saving = true;
+    const overlay = props().overlay, { id, machine } = this.popup;
+    edit(machine ?? null, (list) => renameFolder(list, id, this.text)).finally(() => closeOverlay(overlay));
   }
 
   // The same look as Herdr's own prompt and menus.
@@ -657,7 +669,7 @@ export default class Spaces extends View {
     const t = theme(), p = this.popup, close = () => closeOverlay(props().overlay);
     if (p.kind === "menu") {
       const item = (id, label, color, act) => h_flex().id(id).h(32).px(10).items_center().rounded(6).text_size(12.5)
-        .text_color(color).cursor_pointer().hover((s) => s.bg(t.hover)).on_click(() => { close(); act(); }).child(label);
+        .text_color(color).cursor_pointer().hover((s) => s.bg(t.hover)).on_click(() => { Promise.resolve(act()).finally(close); }).child(label);
       return v_flex().id("folder-menu").size_full().p(5).gap(2).bg(t.popover)
         .child(item("fm-rename", "Rename…", t.foreground, () => this.openRename(p.id, p.machine ?? null)))
         .child(item("fm-delete", "Delete folder", t.blocked, () => edit(p.machine ?? null, (list) => removeFolder(list, p.id))));
