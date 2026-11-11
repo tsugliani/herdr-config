@@ -50,3 +50,29 @@ export function pairRows(rows) {
   flush();
   return out;
 }
+
+// ── Closing a diff tab nobody looks at ──────────────────────────────────────────────────
+// The device that opened a diff tab keeps { token: tab id } in shared(TABS) (shared state is
+// per device), and the tab's props carry the token. Only that device's copy finds its tab
+// there, so only it closes the tab: on another device the same tab (a remote space's) is
+// left alone. Shown = its space is the shown one and it is that space's tab.
+export const TABS = "herdr-tsugliani-diff.tabs";
+export const CLOSE_AFTER_MS = 2 * 60000;
+
+// "gone": the tab no longer exists; "seen": shown now; "close": unseen for `after` ms; else
+// "wait". A space's last tab waits for good: closing it would close the space.
+export function idleVerdict(spaces, tabId, lastSeen, now, after = CLOSE_AFTER_MS) {
+  const space = spaces.find((s) => (s.tabs ?? []).some((t) => t.id === tabId));
+  if (!space) return "gone";
+  if (space.active && space.tabs.find((t) => t.id === tabId).active) return "seen";
+  if (space.tabs.length === 1) return "wait";
+  return now - lastSeen >= after ? "close" : "wait";
+}
+
+// The registry without tabs that no longer exist, plus `token` -> `tabId` when given.
+export function registered(tabs, spaces, token, tabId) {
+  const live = new Set(spaces.flatMap((s) => (s.tabs ?? []).map((t) => t.id)));
+  const out = Object.fromEntries(Object.entries(tabs ?? {}).filter(([, id]) => live.has(id)));
+  if (token && tabId) out[token] = tabId;
+  return out;
+}

@@ -53,7 +53,8 @@ The right panel's git view, with three tabs:
 
 Files show as a folder tree or a flat list. The panel shows no diffs itself:
 clicking a file shows its diff in a preview tab, reused for the next click.
-**Open in tab ↗** opens the whole diff, every file, in a tab.
+**Open in tab ↗** opens the whole diff, every file, in a tab. Both kinds of tab
+close themselves once left unseen for 2 minutes (see below).
 
 #### `herdr-tsugliani-diff`: diff tabs
 
@@ -63,6 +64,14 @@ tab). Click a file header to fold it; `n`/`p` (or `j`/`k`) go to the next or
 previous file, `r` refreshes. Diff tabs reload when the branches or your
 uncommitted work change, and uncommitted diffs include new, untracked files.
 See [Install](#install) to open one from a shell.
+
+**Auto-close.** A diff tab the Changes panel opened closes itself after 2
+minutes unseen: while you're on another tab or another space. One you're
+reading never closes, and coming back to it starts the 2 minutes over. Only the
+device that opened it closes it (a tab in a remote machine's space is on every
+device connected to it, and one that isn't showing it shouldn't close it under
+you), and a space's last tab is left open, as closing it would close the
+space. The time is `CLOSE_AFTER_MS` in `mods/herdr-tsugliani-diff/diff.js`.
 
 #### `herdr-tsugliani-spaces`: spaces with folders
 
@@ -199,9 +208,11 @@ herdr-app do tab.new '{"mod":"herdr-tsugliani-diff","name":"diff main","props":{
 ```
 
 Props: `folder`, `on` (a machine from `hc machine ls`), `base`, `compare`
-(default `HEAD`), `withWork`, `commit`, `working`, `file` (only that file).
-Without `folder` it uses the space's first terminal; without `base`, `main`
-or `master`.
+(default `HEAD`), `withWork`, `commit`, `working`, `file` (only that file),
+`closeAfter` (auto-close after that many ms unseen, `0` never). Without
+`folder` it uses the space's first terminal; without `base`, `main` or
+`master`. A tab opened from a shell doesn't auto-close: only tabs the Changes
+panel opened on this device are registered for it.
 
 ## Changing it
 

@@ -98,6 +98,9 @@ with light suckers and outward-curled tips, and blue `#89c4f4` bubbles.
   after the file. The next click reuses that tab (renamed, selected), the
   way an editor previews files; close it and the next click opens a new one.
   Clicking a folder folds it.
+- Diff tabs the panel opened (preview and Open in tab) close themselves after
+  2 minutes unseen (not the shown tab of the shown space), only on the device
+  that opened them, never a space's last tab.
 - The View button switches every diff tab between inline and side by side;
   the choice is remembered.
 - Uncommitted diffs include untracked files, as added.
@@ -126,21 +129,31 @@ with light suckers and outward-curled tips, and blue `#89c4f4` bubbles.
   `rev-list --left-right --count`, `log`, `show -m --first-parent`,
   `for-each-ref`; `watchFolder` for local repos; `localStorage` keys `mode`,
   `view`, `base:<repo root>`. **Open in tab** runs `tab.new { name, mod:
-  "herdr-tsugliani-diff", props }`. A file click opens `tab.new` with `props.file` and a
-  `preview` token and keeps `{ token, tab }` in `localStorage` as
-  `preview:<space id>`, taking the tab id from `focused().tab` (`run` returns
-  nothing) only if it changed (a failed `tab.new` leaves the old tab
-  focused). Later clicks write one shared key, `herdr-tsugliani-diff.preview` =
-  `{ ...props, file, token, n }`, then `tab.rename` and `tab.select`.
+  "herdr-tsugliani-diff", props: { ...props, token } }`. A file click opens `tab.new`
+  with `props.file` and a `preview` token and keeps `{ token, tab: null, at }`
+  in `localStorage` as `preview:<space id>`. `run` returns nothing and the tab
+  shows up in `spaces()` a moment later (later still from a remote core), so
+  `whenNewTab` watches the space for a tab that wasn't there (every 200 ms, up
+  to 10 s) and then stores `{ token, tab }`; clicks before that go to the
+  coming tab, which is renamed after the last one. Later clicks write one
+  shared key, `herdr-tsugliani-diff.preview` = `{ ...props, file, token, n }`,
+  then `tab.rename` and `tab.select`. Every opened tab is registered in shared
+  `herdr-tsugliani-diff.tabs` = `{ token: tab id }` (shared state is per
+  device, so only the opener's copy finds it), dropping tabs that are gone.
 - `mods/herdr-tsugliani-diff` (`"focusable": true`): one `git diff`/`git show` with
   `--no-ext-diff --no-textconv --no-color --no-renames`, parsed into rows
   by `diff.js` (pure `parse` and `pairRows`, tested by `test/diff.test.mjs`),
   shown with `v_virtual_list` (uniform 22px), `track_scroll` +
   `VirtualListScrollHandle.scroll_to_item` for jumps, `on_item_click` to
   fold. Props: `folder`, `on`, `base`, `compare`, `withWork`, `commit`,
-  `working`, `file` (adds `-- <file>`), `preview`. It sets `herdr-tsugliani-diff.last`
-  to `{ root, on }`; a preview tab reloads when `herdr-tsugliani-diff.preview` carries
-  its token and a new `n`. A repo with no commits is diffed against the empty
+  `working`, `file` (adds `-- <file>`), `preview`, `token`, `closeAfter`. It sets
+  `herdr-tsugliani-diff.last` to `{ root, on }`; a preview tab reloads when
+  `herdr-tsugliani-diff.preview` carries its token and a new `n`, checked on a
+  150 ms timer, not in `render` (loading notifies, which `render` may not do).
+  Every 15 s it looks up its token (`token`, else `preview`) in
+  `herdr-tsugliani-diff.tabs`; found, `idleVerdict` (pure, in `diff.js`, tested)
+  says seen, wait, close (unseen `CLOSE_AFTER_MS` = 2 min, or `closeAfter`) or
+  gone; on close it unregisters and runs `tab.close`. A repo with no commits is diffed against the empty
   tree (`4b825dc…`) instead of `HEAD`. Side by side pairs each run of
   removed lines with the added lines after it; shared `herdr-tsugliani-diff.split` holds
   the view. Untracked files come from `ls-files --others --exclude-standard`,

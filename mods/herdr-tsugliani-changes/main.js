@@ -2,6 +2,27 @@ import { View, div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { spaces, panes, focused, exec, watchFolder, theme, settings, run, setShared, shared } from "herdr";
 
+// Diff tabs this device opened, { token: tab id }: each closes itself once left unseen.
+// Same key and shape as herdr-tsugliani-diff's diff.js (TABS, registered), which can't be
+// imported from here.
+const DIFF_TABS = "herdr-tsugliani-diff.tabs";
+function registered(tabs, all, token, tabId) {
+  const live = new Set(all.flatMap((s) => (s.tabs ?? []).map((t) => t.id)));
+  const out = Object.fromEntries(Object.entries(tabs ?? {}).filter(([, id]) => live.has(id)));
+  if (token && tabId) out[token] = tabId;
+  return out;
+}
+
+// tab.new answers nothing, and the tab shows up in spaces() a moment later (from another
+// machine's core, later still): watch the space for a tab that wasn't there, then hand its
+// id to `done`. Gives up after about 10 s (tab.new failed).
+const NEW_TAB_MS = 10000, NEW_TAB_STEP = 200;
+function whenNewTab(cx, spaceId, before, done, left = NEW_TAB_MS / NEW_TAB_STEP) {
+  const fresh = spaces().find((s) => s.id === spaceId)?.tabs.find((t) => !before.has(t.id));
+  if (fresh) return done(fresh.id);
+  if (left > 0) cx.timer.after(NEW_TAB_STEP, (c) => whenNewTab(c ?? cx, spaceId, before, done, left - 1));
+}
+
 // Where the panel last looked; kept while a mod pane (a diff tab) has the focus.
 let last = null;
 
@@ -252,24 +273,35 @@ export default class GitChanges extends View {
   }
 
   // A click shows that file's diff in the space's preview tab: opened the first time,
-  // reused after (remembered per space, across restarts).
+  // reused after (remembered per space, across restarts). Until the new tab shows up, it is
+  // remembered without its id ("at": when asked for), so clicks meanwhile go to it too.
   pick(path, cx) {
     const show = this.diffProps(), space = spaces().find((s) => s.active);
     if (!show || !space) return;
     this.open = path;
-    const name = path.split("/").pop(), key = `preview:${space.id}`;
+    const name = path.split("/").pop(), key = `preview:${space.id}`, now = Date.now();
     let saved = null;
     try { saved = JSON.parse(store.get(key)); } catch {}
-    if (saved && space.tabs.some((t) => t.id === saved.tab)) {
-      setShared("herdr-tsugliani-diff.preview", { ...show, file: path, token: saved.token, n: Date.now() });
-      run("tab.rename", { id: saved.tab, name });
-      run("tab.select", { id: saved.tab });
+    const live = Boolean(saved?.tab) && space.tabs.some((t) => t.id === saved.tab);
+    const coming = Boolean(saved?.token) && !saved.tab && now - (saved.at ?? 0) < NEW_TAB_MS;
+    this.previewName = { ...this.previewName, [key]: name };
+    if (live || coming) {
+      setShared("herdr-tsugliani-diff.preview", { ...show, file: path, token: saved.token, n: now });
+      if (live) {
+        setShared(DIFF_TABS, registered(shared(DIFF_TABS), spaces(), saved.token, saved.tab));
+        run("tab.rename", { id: saved.tab, name });
+        run("tab.select", { id: saved.tab });
+      }
     } else {
-      const token = Math.random().toString(36).slice(2), before = focused()?.tab;
+      const token = Math.random().toString(36).slice(2), before = new Set(space.tabs.map((t) => t.id));
+      store.set(key, JSON.stringify({ token, tab: null, at: now }));
       run("tab.new", { name, mod: "herdr-tsugliani-diff", props: { ...show, file: path, preview: token } });
-      // Only a tab that really opened: if tab.new failed, the focused tab is still the old one.
-      const tab = focused()?.tab;
-      if (tab && tab !== before) store.set(key, JSON.stringify({ token, tab }));
+      whenNewTab(cx, space.id, before, (tab) => {
+        store.set(key, JSON.stringify({ token, tab }));
+        setShared(DIFF_TABS, registered(shared(DIFF_TABS), spaces(), token, tab));
+        // Named after the last file clicked while it was on its way.
+        if (this.previewName[key] !== name) run("tab.rename", { id: tab, name: this.previewName[key] });
+      });
     }
     cx.notify();
   }
@@ -338,17 +370,22 @@ export default class GitChanges extends View {
   }
 
   // The whole diff in a tab of its own (the herdr-tsugliani-diff mod).
-  openTab() {
+  openTab(cx) {
     const props = this.diffProps();
     if (!props) return;
     const name = this.mode === "history" ? this.selected.short : this.mode === "branch" ? `diff ${this.base}` : "uncommitted";
-    run("tab.new", { name, mod: "herdr-tsugliani-diff", props });
+    const space = spaces().find((s) => s.active);
+    if (!space) return;
+    const token = Math.random().toString(36).slice(2), before = new Set(space.tabs.map((t) => t.id));
+    run("tab.new", { name, mod: "herdr-tsugliani-diff", props: { ...props, token } });
+    // Registered once it shows up, so it closes itself when left unseen (the diff's diff.js).
+    whenNewTab(cx, space.id, before, (tab) => setShared(DIFF_TABS, registered(shared(DIFF_TABS), spaces(), token, tab)));
   }
 
 
   tabButton(t) {
     return div().id("open-tab").h(24).px(8).flex().flex_none().items_center().rounded(6).border_1().border_color(t.border).text_size(11).text_color(t.muted)
-      .cursor_pointer().hover((s) => s.bg(t.hover)).on_click(() => this.openTab()).child("Open in tab ↗");
+      .cursor_pointer().hover((s) => s.bg(t.hover)).on_click((_e, cx) => this.openTab(cx)).child("Open in tab ↗");
   }
 
   modeBar(t) {

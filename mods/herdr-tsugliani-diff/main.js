@@ -1,13 +1,16 @@
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, Scrollbar, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
-import { spaces, panes, focused, props, exec, theme, settings, nextCommand, shared, setShared } from "herdr";
-import { MAX_ROWS, parse, pairRows } from "./diff.js";
+import { spaces, panes, focused, props, exec, theme, settings, nextCommand, shared, setShared, run } from "herdr";
+import { MAX_ROWS, parse, pairRows, TABS, CLOSE_AFTER_MS, idleVerdict, registered } from "./diff.js";
 
 // A diff as a tab: `git diff <base>...HEAD` by default, inline or side by side.
 // props: { folder?, on?, base?, compare? ("HEAD"), withWork?, commit?, working?, file?, preview? }
 // Without a folder it uses the space's first terminal; without a base, main/master.
 // file: only that file. preview: a token; the tab then shows what the Changes panel
 // last put in shared("herdr-tsugliani-diff.preview") with that token.
+// token (or preview): the tab's key in shared(TABS). A tab the Changes panel opened on this
+// device closes itself after CLOSE_AFTER_MS unseen (props.closeAfter: other ms, 0 never);
+// see diff.js.
 
 const READ = ["--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "diff.autoRefreshIndex=false"];
 const DIFF = ["--no-ext-diff", "--no-textconv", "--no-color", "--no-renames"];
@@ -30,6 +33,11 @@ export default class GitDiff extends View {
     this.handle = cx.focus_handle(); this.scroll = VirtualListScrollHandle.new();
     this.load(cx);
     cx.timer.every(10000, (cx) => this.poll(cx));
+    this.lastSeen = Date.now();
+    cx.timer.every(15000, () => this.closeIfIdle());
+    // A preview tab follows the Changes panel's picks. Checked here, not in render(): loading
+    // notifies, and render() may not ask for a re-render.
+    if (p.preview) cx.timer.every(150, (cx) => this.followPreview(cx));
     cx.spawn(async (cx) => {
       for (;;) {
         const c = await nextCommand();
@@ -37,6 +45,21 @@ export default class GitDiff extends View {
         cx.notify();
       }
     });
+  }
+
+  // Closes this tab once it has gone unseen long enough, only on the device that opened it.
+  closeIfIdle() {
+    const token = this.p.token ?? this.p.preview, after = this.p.closeAfter ?? CLOSE_AFTER_MS;
+    const tabs = shared(TABS) ?? {}, tab = token ? tabs[token] : null;
+    if (!tab || !(after > 0)) return;
+    const now = Date.now(), all = spaces();
+    const verdict = idleVerdict(all, tab, this.lastSeen, now, after);
+    if (verdict === "seen") this.lastSeen = now;
+    if (verdict === "gone" || verdict === "close") {
+      const { [token]: _mine, ...rest } = tabs;
+      setShared(TABS, registered(rest, all));
+    }
+    if (verdict === "close") run("tab.close", { id: tab });
   }
 
   git(args) { return exec("git", [...READ, ...args], { cwd: this.root, on: this.on }); }
@@ -237,7 +260,6 @@ export default class GitDiff extends View {
   }
 
   render(cx) {
-    this.followPreview(cx);
     const t = theme(), add = this.files.reduce((n, f) => n + f.add, 0), del = this.files.reduce((n, f) => n + f.del, 0);
     const stats = this.p.file ? this.what()
       : [this.ahead != null && !this.p.commit && !this.p.working ? `${this.ahead} commits ahead, ${this.behind} behind` : null, `${this.files.length} files`].filter(Boolean).join(" · ");
