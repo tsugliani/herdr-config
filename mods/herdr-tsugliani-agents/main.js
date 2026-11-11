@@ -3,11 +3,15 @@
 // herdr-tsugliani-agents changes: the title on its own line (see row), and agents idle
 // for INACTIVE_MS (not pinned, not focused, no busy sub-agent) leave Idle (or their
 // space) for an Inactive section at the bottom, faded and folded until opened. Any new
-// activity brings them back. The rail shows active agents only.
+// activity brings them back. The rail shows active agents only. How long an agent has
+// been idle comes from the core (status_ms, from `terminal.list` every CORE_MS), so every
+// device agrees even if it slept through a change; this device's own record only fills in
+// when the core doesn't answer. (terminals() carries a status_ms too, but it isn't kept
+// up to date.)
 
 import { View, div, image, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { agents, terminals, panes, focused, spaces, run, theme, shared, setShared, setAgentOrder, openOverlay, closeOverlay, props, window, layout } from "herdr";
+import { agents, terminals, panes, focused, spaces, run, theme, shared, setShared, setAgentOrder, openOverlay, closeOverlay, props, window, layout, exec } from "herdr";
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -51,6 +55,20 @@ function title(tab, l) {
 }
 const RANK = { blocked: 4, done: 3, working: 2, idle: 1 };
 const INACTIVE_MS = 2 * 3600000;
+const CORE_MS = 30000;
+
+// Each terminal's last status change on its core (ms), by address, in one `hc connect`.
+async function coreSince() {
+  const req = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "terminal.list", params: {} }) + "\n";
+  const r = await exec("sh", ["-c", 'H=$(command -v hc || echo "$HOME/.local/bin/hc"); printf "%s" "$1" | "$H" connect', "sh", req], { timeout: 15000 });
+  for (const line of String(r.stdout ?? "").split("\n")) {
+    let reply = null;
+    try { reply = JSON.parse(line); } catch { continue; }
+    if (reply?.id !== 1 || !Array.isArray(reply.result?.terminals)) continue;
+    return Object.fromEntries(reply.result.terminals.filter((t) => t.address && Number.isFinite(t.status_ms)).map((t) => [t.address, t.status_ms]));
+  }
+  return null;
+}
 const INACTIVE_FADE = 0.5;
 // A sub-agent without a pane isn't in agents(): its raw word, error counting as
 // blocked. It's never done: it reports to its parent, and the parent's done is the news.
@@ -91,7 +109,19 @@ export default class Agents extends View {
     this.pendingPins = JSON.parse(localStorage.getItem("pins") ?? "[]");
     if (!this.pendingPins.length) localStorage.removeItem("pins");
     this.migratingPins = new Set();
+    this.core = {};
     cx.timer.every(30000, (cx) => cx.notify());
+    cx.timer.every(CORE_MS, (cx) => this.readCore(cx));
+    this.readCore(cx);
+  }
+
+  readCore(cx) {
+    if (this.readingCore) return;
+    this.readingCore = true;
+    cx.spawn(async (cx) => {
+      try { const got = await coreSince(); if (got) { this.core = got; cx.notify(); } }
+      catch {} finally { this.readingCore = false; }
+    });
   }
 
   // Stamps agents whose state changed. Done and idle count as one: looking at a
@@ -132,7 +162,7 @@ export default class Agents extends View {
   }
 
   since(a) {
-    return this.changed[a.address]?.at ?? 0;
+    return this.core[a.address] ?? this.changed[a.address]?.at ?? 0;
   }
 
   // Looking at a done agent makes it idle; it stays with Done until you leave
