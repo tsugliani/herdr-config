@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, readFileSync, existsSync, writeFileSync, chmodSync, readdirSync } from "node:fs";
+import { mkdtempSync, readFileSync, existsSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -60,17 +60,6 @@ test("without rate limits the session has no limit meters and limits.json keeps 
   assert.equal(s.effort, null);
   assert.equal(s.window, 200000);
   assert.equal(readFileSync(join(again.dir, "limits.json"), "utf8"), before);
-});
-
-test("it hands the same JSON on to Orca's status line script when there is one", () => {
-  const home = mkdtempSync(join(tmpdir(), "sb-"));
-  mkdirSync(join(home, ".orca/agent-hooks"), { recursive: true });
-  const orca = join(home, ".orca/agent-hooks/claude-statusline.sh");
-  writeFileSync(orca, '#!/bin/sh\ncat > "$HOME/got"\n');
-  chmodSync(orca, 0o755);
-  const { r } = run(FULL, {}, home);
-  assert.equal(r.status, 0);
-  assert.deepEqual(JSON.parse(readFileSync(join(home, "got"), "utf8")), FULL);
 });
 
 test("empty input is ignored", () => {

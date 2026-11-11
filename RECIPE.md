@@ -170,9 +170,10 @@ with light suckers and outward-curled tips, and blue `#89c4f4` bubbles.
   `backups/claude-statusline.prev.json` for uninstall). With `jq` it writes
   `~/.local/state/herdr-session-bar/<HC_TERMINAL_ID>.json` (model, effort,
   window, `ctx` / `5h` / `7d` meters, the limits with `resets_at`) and
-  `limits.json` (the `5h` / `7d` meters from whichever session reported last),
-  then pipes the JSON on to `~/.orca/agent-hooks/claude-statusline.sh` if it
-  exists. The mod watches the folder: `limits.json` draws the limit chips for
+  `limits.json` (the `5h` / `7d` meters from whichever session reported last).
+  `herdr.sh install` also copies the script to each connected machine with
+  Claude Code (`~/.local/share/herdr-tsugliani-session-bar/`) and sets its
+  `statusLine`. The mod watches the folder (and re-reads it every 30 s): `limits.json` draws the limit chips for
   any focused pane, `<terminal>.json` the model and `ctx` chips while the
   focused pane runs Claude Code. `usage.js` (pure, tested) turns a meter into
   what's drawn: level (limits amber ≥ 70, red ≥ 90; ctx amber ≥ 80, red ≥ 95),

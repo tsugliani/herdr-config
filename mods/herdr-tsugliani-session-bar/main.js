@@ -5,7 +5,10 @@
 // percent, and while the focused pane runs Claude Code also its model, effort and
 // context (ctx) meter. The numbers come from claude-statusline.sh in this folder, which
 // Claude Code runs as its status line command: it writes <terminal>.json and limits.json
-// under ~/.local/state/herdr-session-bar/, and the bar watches that folder. Resting the
+// under ~/.local/state/herdr-session-bar/, and the bar watches that folder (re-read every
+// 30 s too, in case the watch ends). A Claude Code pane on another machine (zboxdev/t1g)
+// reads t1g.json there, every few seconds while focused, as no folder watch reaches it;
+// the limits are the freshest limits.json of this computer and the machines. Resting the
 // pointer on the Claude chips opens a card with every number and reset time; a reading
 // older than 15 min is dimmed. The session's writing speed (tok/s) follows the model: an
 // estimate per reply, worked out by the script, with the session average in the card.
@@ -17,7 +20,7 @@
 // github.com/nozikov/herdr-usage-limits (MIT).
 import { View, div, svg } from "gpui-kit";
 import { HoverCard, v_flex, h_flex } from "gpui-base";
-import { spaces, panes, focused, exec, readTextFile, watchFolder, theme, home, layout, props, run, notify, openOverlay, closeOverlay } from "herdr";
+import { spaces, panes, focused, exec, readTextFile, watchFolder, theme, home, layout, props, run, notify, openOverlay, closeOverlay, machines } from "herdr";
 import { modelName, windowLabel, meterView, ago, isStale, speedView } from "./usage.js";
 
 const NAME = "herdr-tsugliani-session-bar";
@@ -26,6 +29,22 @@ const READ = ["--no-optional-locks", "-c", "core.fsmonitor=false"];
 const BAR_W = 46, CARD_W = 330, CARD_BAR_W = 110;
 const CARD_OPEN_MS = 350, CARD_CLOSE_MS = 300; // passing over the bar doesn't flash the card; the pointer can cross to it
 const infoDir = () => `${home()}/.local/state/herdr-session-bar`;
+// The same folder on another machine, from its home (where exec starts there).
+const REMOTE_INFO = ".local/state/herdr-session-bar";
+const REMOTE_MS = 4000, LIMITS_MS = 30000;
+// "zboxdev/t1g" -> { machine: "zboxdev", id: "t1g" }; a terminal here has no machine.
+function splitTerminal(terminal) {
+  const at = terminal?.indexOf("/") ?? -1;
+  return at < 0 ? { machine: null, id: terminal ?? null } : { machine: terminal.slice(0, at), id: terminal.slice(at + 1) };
+}
+// A file of the folder on `machine`, parsed, or null.
+async function readThere(machine, name) {
+  try {
+    const r = await exec("cat", [`${REMOTE_INFO}/${name}`], { on: machine, timeout: 10000 });
+    return r.code === 0 ? JSON.parse(r.stdout) : null;
+  } catch { return null; }
+}
+const validLimits = (l) => (Array.isArray(l?.meters) && Number.isFinite(l?.at) ? l : null);
 // cc-model-router (a Claude Code plugin) writes its switch here, one file per terminal.
 const routerDir = () => `${home()}/.local/state/herdr-model-router`;
 
@@ -101,6 +120,7 @@ export default class SessionBar extends View {
     this.popup = props()?.popup ?? null;
     if (this.popup) return;
     this.git = null; this.info = null; this.limits = null; this.width = 1000;
+    this.localLimits = null; this.remoteLimits = {};
     cx.timer.every(8000, (cx) => this.refresh(cx));
     // Ticks, times to reset and staleness move with the clock.
     cx.timer.every(60000, (cx) => cx.notify());
@@ -155,6 +175,11 @@ export default class SessionBar extends View {
       try { await exec("mkdir", ["-p", routerDir()]); } catch {}
       try { for (;;) { await watchFolder(routerDir()); this.readInfo(cx); } } catch {}
     });
+    // A remote session's file can't be watched: read it while its pane is focused.
+    cx.timer.every(REMOTE_MS, (cx) => { const w = where(); if (splitTerminal(w.terminal).machine && isClaude(w.pane)) this.readInfo(cx); });
+    // Every machine's limits, and this computer's folder again in case its watch ended.
+    cx.timer.every(LIMITS_MS, (cx) => { this.readInfo(cx); this.readRemoteLimits(cx); });
+    this.readRemoteLimits(cx);
     // Whether the plugin is enabled at all lives in Claude Code's settings.
     cx.timer.every(30000, (cx) => this.readPlugin(cx));
     this.readPlugin(cx);
@@ -174,19 +199,43 @@ export default class SessionBar extends View {
 
   // limits.json holds the account's limits from whichever session reported last, so they
   // show whatever pane is focused; <terminal>.json is the focused Claude Code session's own.
+  // A pane on another machine reads its own file there; the router is this computer's only.
   readInfo(cx) {
     const { terminal, pane } = where();
-    const own = terminal && !terminal.includes("/") && isClaude(pane) ? terminal : null;
+    const { machine, id } = splitTerminal(terminal);
+    const own = id && isClaude(pane) ? id : null;
     cx.spawn(async (cx) => {
       const read = async (path) => { try { return JSON.parse((await readTextFile(path)) ?? "null"); } catch { return null; } };
       const limits = await read(`${infoDir()}/limits.json`);
-      const info = own ? await read(`${infoDir()}/${own}.json`) : null;
-      const router = own ? await read(`${routerDir()}/${own}.json`) : null;
-      if (where().terminal !== terminal) return;
-      this.limits = Array.isArray(limits?.meters) ? limits : null;
-      this.info = info; this.router = router?.ended ? null : router;
+      const info = !own ? null : machine ? await readThere(machine, `${own}.json`) : await read(`${infoDir()}/${own}.json`);
+      const router = own && !machine ? await read(`${routerDir()}/${own}.json`) : null;
+      this.localLimits = validLimits(limits);
+      this.pickLimits();
+      if (where().terminal === terminal) { this.info = info; this.router = router?.ended ? null : router; }
       cx.notify();
     });
+  }
+
+  // Each connected machine's limits.json; one round at a time.
+  readRemoteLimits(cx) {
+    if (this.readingRemote) return;
+    const names = machines().filter((m) => m.name && m.layout === "ready").map((m) => m.name);
+    if (!names.length) { this.remoteLimits = {}; this.pickLimits(); return; }
+    this.readingRemote = true;
+    cx.spawn(async (cx) => {
+      try {
+        const got = await Promise.all(names.map((m) => readThere(m, "limits.json")));
+        this.remoteLimits = Object.fromEntries(names.map((m, i) => [m, validLimits(got[i])]));
+        this.pickLimits();
+        cx.notify();
+      } finally { this.readingRemote = false; }
+    });
+  }
+
+  // The account's limits: the freshest report of any machine.
+  pickLimits() {
+    this.limits = [this.localLimits, ...Object.values(this.remoteLimits)].filter(Boolean)
+      .reduce((best, l) => (!best || l.at > best.at ? l : best), null);
   }
 
   // cc-model-router for the focused Claude Code pane: the plugin's switch in Claude Code's
@@ -316,7 +365,7 @@ export default class SessionBar extends View {
     const session = i && isClaude(w.pane) ? { ...i, views: (i.meters ?? []).filter((m) => m.label === "ctx").map((m) => meterView(m, nowSec)), speedView: speedView(i.speed) } : null;
     const limits = (this.limits?.meters ?? []).map((m) => meterView(m, nowSec));
     const stale = limits.length > 0 && isStale(this.limits.at, Date.now());
-    const router = isClaude(w.pane) ? this.routerState() : null;
+    const router = isClaude(w.pane) && !splitTerminal(w.terminal).machine ? this.routerState() : null;
     const meterChip = (v) => chip(`sb-m-${v.label}`, {},
       mid ? div().text_color(t.dim).child(v.label) : null,
       wide ? this.track(t, v) : null,

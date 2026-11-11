@@ -127,11 +127,13 @@ speed; a reading older than 15 minutes is dimmed.
 
 No plugin: Claude Code's own status line feeds it. `./herdr.sh install` points
 `statusLine` in `~/.claude/settings.json` at the mod's `claude-statusline.sh`
-(needs `jq`), which writes the numbers to `~/.local/state/herdr-session-bar/`
-and then hands the same JSON to Orca's status line script, if Orca installed
-one. Numbers appear after each session's next reply (Claude Code reads the
-setting on the fly). `./herdr.sh uninstall` puts the previous `statusLine`
-back.
+(needs `jq`), which writes the numbers to `~/.local/state/herdr-session-bar/`.
+It does the same on each connected machine that has Claude Code (the script
+goes to `~/.local/share/herdr-tsugliani-session-bar/` there), and for a pane on
+one of them the bar reads that machine's numbers every few seconds; the limits
+are the freshest any machine reported. Numbers appear after each session's next
+reply (Claude Code reads the setting on the fly). `./herdr.sh uninstall` puts
+the previous `statusLine` back everywhere.
 
 #### `herdr-tsugliani-brand`: logo row
 

@@ -4,7 +4,8 @@
 #
 #   ./herdr.sh install [--force]   copy layouts/, themes/ and mods/ into Herdr, merge keys.json into its keys,
 #                                  check the mods, switch layout and theme, and point Claude Code's
-#                                  statusLine at the session bar's script (keys and statusLine need jq)
+#                                  statusLine at the session bar's script, here and on each connected
+#                                  machine with Claude Code (keys and statusLine need jq)
 #   ./herdr.sh pull                copy edits made in Herdr back into this repo
 #   ./herdr.sh status              what differs between this repo and Herdr
 #   ./herdr.sh uninstall           remove them from Herdr (back to the main layout, the previous statusLine and keys)
@@ -114,6 +115,71 @@ install_statusline() {
   echo "Claude Code's statusLine now runs claude-statusline.sh: usage shows after each session's next reply"
 }
 
+# ── The same on the other machines (hc machine ls), each from its own home ─────────────────
+# The script goes to REMOTE_DIR there; the previous statusLine and a settings backup beside it.
+HC="$(command -v hc || echo "$HOME/.local/bin/hc")"
+REMOTE_DIR='$HOME/.local/share/herdr-tsugliani-session-bar'
+REMOTE_COMMON='d='"$REMOTE_DIR"'; s="$HOME/.claude/settings.json"; me="$d/claude-statusline.sh"
+now() { [ -f "$s" ] && jq -r ".statusLine.command // \"\"" "$s" 2>/dev/null || true; }'
+# stdin: the script. Prints what it did, one word.
+REMOTE_INSTALL="$REMOTE_COMMON"'
+{ command -v claude || [ -x "$HOME/.local/bin/claude" ]; } >/dev/null 2>&1 || { echo no-claude; exit 0; }
+command -v jq >/dev/null 2>&1 || { echo no-jq; exit 0; }
+mkdir -p "$d/backups" && cat > "$me.tmp" && chmod +x "$me.tmp" && mv -f "$me.tmp" "$me" || exit 1
+[ "$(now)" = "$me" ] && { echo already; exit 0; }
+[ -f "$s" ] || { mkdir -p "$HOME/.claude"; echo "{}" > "$s"; }
+cp "$s" "$d/backups/settings-$(date +%Y%m%d-%H%M%S).json"
+jq ".statusLine // null" "$s" > "$d/statusline.prev.json"
+jq --arg c "$me" ".statusLine = {type: \"command\", command: \$c}" "$s" > "$s.tmp" && mv -f "$s.tmp" "$s" && echo set'
+REMOTE_UNINSTALL="$REMOTE_COMMON"'
+command -v jq >/dev/null 2>&1 || exit 0
+if [ "$(now)" = "$me" ]; then
+  p="$d/statusline.prev.json"
+  if [ -s "$p" ] && [ "$(cat "$p")" != null ]; then jq --slurpfile p "$p" ".statusLine = \$p[0]" "$s" > "$s.tmp"
+  else jq "del(.statusLine)" "$s" > "$s.tmp"; fi
+  mv -f "$s.tmp" "$s" && echo restored
+fi
+rm -f "$me" "$d/statusline.prev.json"'
+REMOTE_STATUS="$REMOTE_COMMON"'
+{ command -v claude || [ -x "$HOME/.local/bin/claude" ]; } >/dev/null 2>&1 || { echo no-claude; exit 0; }
+[ "$(now)" = "$me" ] && echo ours || echo other'
+
+remote_machines() {
+  [ -x "$HC" ] && command -v jq >/dev/null || return 0
+  "$HC" machine ls --json 2>/dev/null | jq -r '.machines[] | select(.state == "connected" and (.temporary | not)) | .name' || true
+}
+remote_offline() {
+  [ -x "$HC" ] && command -v jq >/dev/null || return 0
+  "$HC" machine ls --json 2>/dev/null | jq -r '.machines[] | select(.state != "connected" and (.temporary | not)) | .name' || true
+}
+
+install_remote_statusline() {
+  local m r
+  for m in $(remote_machines); do
+    r="$("$HC" exec --on "$m" -i sh -c "$REMOTE_INSTALL" < "$REPO/mods/herdr-tsugliani-session-bar/claude-statusline.sh" 2>&1)" || r="failed: $r"
+    case "$r" in
+      set) echo "$m: Claude Code's statusLine now runs claude-statusline.sh" ;;
+      already) echo "$m: Claude Code's statusLine already runs claude-statusline.sh (script updated)" ;;
+      no-claude) ;;
+      no-jq) echo "$m: jq is missing there: its Claude usage won't show in the session bar" ;;
+      *) echo "$m: couldn't set Claude Code's statusLine: $r" ;;
+    esac
+  done
+  for m in $(remote_offline); do echo "$m: not connected, its statusLine was left alone"; done
+}
+
+uninstall_remote_statusline() {
+  local m r
+  for m in $(remote_machines); do
+    r="$("$HC" exec --on "$m" sh -c "$REMOTE_UNINSTALL" 2>&1)" || r="failed: $r"
+    case "$r" in
+      restored) echo "$m: restored Claude Code's previous statusLine" ;;
+      "") ;;
+      *) echo "$m: couldn't restore Claude Code's statusLine: $r" ;;
+    esac
+  done
+}
+
 uninstall_statusline() {
   command -v jq >/dev/null || return 0
   [ "$(statusline_now)" = "$STATUSLINE" ] || return 0
@@ -153,6 +219,7 @@ install() {
   for f in $(files); do cp "$REPO/$f" "$HOME_DIR/$f"; echo "installed $f"; done
   install_keys
   install_statusline
+  install_remote_statusline
   if running; then
     for m in $(mods); do herdr-app check "$HOME_DIR/mods/$m"; done
     herdr-app do layout.switch --name "$LAYOUT" >/dev/null && echo "switched to the $LAYOUT layout (ctrl-shift-l / cmd-shift-l cycles layouts)"
@@ -182,6 +249,16 @@ status() {
   if [ "$sl" = "$STATUSLINE" ]; then echo "Claude Code's statusLine runs claude-statusline.sh"
   elif [ -n "$sl" ]; then echo "Claude Code's statusLine is something else (no usage in the session bar): ${sl:0:60}…"
   else echo "Claude Code has no statusLine (no usage in the session bar)"; fi
+  local m r
+  for m in $(remote_machines); do
+    r="$("$HC" exec --on "$m" sh -c "$REMOTE_STATUS" 2>/dev/null)" || r="unknown"
+    case "$r" in
+      ours) echo "$m: Claude Code's statusLine runs claude-statusline.sh" ;;
+      other) echo "$m: Claude Code's statusLine is something else (no usage in the session bar)" ;;
+      no-claude) ;;
+      *) echo "$m: couldn't check Claude Code's statusLine" ;;
+    esac
+  done
 }
 
 uninstall() {
@@ -189,6 +266,7 @@ uninstall() {
     herdr-app do layout.switch --name main >/dev/null
   fi
   uninstall_statusline
+  uninstall_remote_statusline
   uninstall_keys
   for m in $(mods); do rm -rf "$HOME_DIR/mods/$m"; echo "removed mods/$m"; done
   for f in $(files); do rm -f "$HOME_DIR/$f"; echo "removed $f"; done

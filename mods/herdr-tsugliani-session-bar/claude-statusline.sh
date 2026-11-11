@@ -6,9 +6,9 @@
 #   <terminal>.json   this session: model, effort, context window, ctx / 5h / 7d meters,
 #                     and its writing speed (see speed below)
 #   limits.json       the account's 5h and 7d limits, from whichever session reported last
-# Then it hands the same JSON to Orca's status line script, if Orca installed one, so Orca
-# keeps its numbers when Claude runs there. It prints nothing: the bar is the display.
-# `./herdr.sh install` points statusLine in ~/.claude/settings.json here. Needs jq.
+# It prints nothing: the bar is the display. On another machine (zboxdev), the bar reads
+# these files there. `./herdr.sh install` points statusLine in ~/.claude/settings.json here,
+# on this computer and on each connected machine with Claude Code. Needs jq.
 set -u
 
 payload=$(cat)
@@ -84,11 +84,5 @@ if [ -n "$terminal" ] && command -v jq >/dev/null 2>&1; then
       rm -f "$tmp"
     fi
   fi
-fi
-
-# Orca's own status line script, when Orca installed one: it reads the same JSON.
-orca="$HOME/.orca/agent-hooks/claude-statusline.sh"
-if [ -f "$orca" ] && [ -r "$orca" ] && [ -x "$orca" ]; then
-  printf '%s\n' "$payload" | /bin/sh "$orca"
 fi
 exit 0
