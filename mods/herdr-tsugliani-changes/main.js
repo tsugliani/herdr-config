@@ -453,7 +453,7 @@ export default class GitChanges extends View {
     const parts = f.path.split("/"), name = parts.pop();
     return h_flex().id(`change-${f.path}`).h(28).flex_none().pl(8 + depth * 14).pr(8).gap(8).items_center().rounded(7).cursor_pointer().when(this.open === f.path, (e) => e.bg(t.selected)).hover((s) => s.bg(t.hover)).on_click((_e, cx) => this.pick(f.path, cx))
       .child(div().w(14).flex_none().text_size(11).text_color(f.status === "A" ? t.ansi2 : f.status === "D" ? t.ansi1 : f.status === "U" ? t.ansi1 : t.blocked).child(f.status))
-      .child(h_flex().flex_1().min_w(0).when(!this.tree, (e) => e.child(div().text_color(t.dim).truncate().child(parts.length ? parts.join("/") + "/" : ""))).child(div().max_w(260).min_w(0).truncate().child(name)))
+      .child(h_flex().flex_1().min_w(0).when(!this.tree, (e) => e.child(div().min_w(0).flex_shrink_1().text_color(t.dim).truncate().child(parts.length ? parts.join("/") + "/" : ""))).child(div().min_w(0).truncate().child(name)))
       .when(f.add > 0, (e) => e.child(div().flex_none().text_size(11).text_color(t.ansi2).child(`+${f.add}`))).when(f.del > 0, (e) => e.child(div().flex_none().text_size(11).text_color(t.ansi1).child(`−${f.del}`)));
   }
 
